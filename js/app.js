@@ -12,7 +12,6 @@ export class CodaRom {
     }
 
     async init() {
-        // ROM Upload Handler
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -21,13 +20,10 @@ export class CodaRom {
                 const arrayBuffer = await file.arrayBuffer();
                 let raw = new Uint8Array(arrayBuffer);
 
-                // --- FORCE POKEMON CRYSTAL SIZE (2MB) ---
-                // Header at 0x0148 determines the size. We force it here.
                 const sizeCode = raw[0x0148];
                 const expectedSize = 32768 << sizeCode;
 
                 if (raw.length < expectedSize) {
-                    console.log(`Padding ROM to ${expectedSize} bytes...`);
                     const padded = new Uint8Array(expectedSize).fill(0);
                     padded.set(raw);
                     raw = padded;
@@ -35,16 +31,15 @@ export class CodaRom {
 
                 this.originalBuffer = raw;
                 this.workingBuffer = new Uint8Array([...this.originalBuffer]);
-                
+
                 this.populateBankDropdown();
                 this.loadBank(0);
-                console.log("ROM Prepared and Buffered.");
+                console.log("ROM Prepared.");
             } catch (err) {
                 console.error("ROM Load Error:", err);
             }
         });
 
-        // UI Tabs
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => {
                 const target = btn.dataset.tab;
@@ -88,35 +83,32 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            // Reset Canvas
-            canvas.width = 160;
-            canvas.height = 144;
+            // 1. Optimized ROM conversion (Binary String)
+            // Using a loop on 2MB can crash mobile browsers; this is faster.
+            const binaryString = Array.from(this.workingBuffer, b => String.fromCharCode(b)).join("");
 
-            // Grant Galitz's Core requires the ROM as a binary string or specialized array
-            // We convert our Uint8Array to a binary string for maximum compatibility
-            let binaryString = "";
-            for (let i = 0; i < this.workingBuffer.length; i++) {
-                binaryString += String.fromCharCode(this.workingBuffer[i]);
-            }
-
-            // Initialize the Core
+            // 2. Core Setup
             this.gb = new window.GameBoyCore(canvas, binaryString);
             
-            // Explicitly enable GBC mode
-            this.gb.cGBC = true;
-            this.gb.useGBC = true;
+            // Required flags for Pokemon Crystal
+            this.gb.toggleCGB(true); 
+            this.gb.registerAudioBuffer(); // Pre-link audio
 
-            // Start the engine
+            // 3. Start Engine
             this.gb.start();
-            
+
+            // 4. Force Execution Loop
+            // We check 'stopEmulator' flags which the core uses internally
             const emuStep = () => {
-                if (this.gb && (this.gb.stopEmulator & 2) === 0) {
-                    this.gb.run();
+                if (this.gb) {
+                    // Execute a single frame
+                    this.gb.run(); 
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
-            console.log("Emulator Started.");
+            
+            console.log("Emulator execution loop active.");
 
         } catch (err) {
             console.error("Boot Failure:", err);
@@ -137,9 +129,12 @@ export class CodaRom {
             };
             btn.addEventListener('touchstart', (e) => { e.preventDefault(); handle(true); });
             btn.addEventListener('touchend', (e) => { e.preventDefault(); handle(false); });
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); handle(true); });
+            btn.addEventListener('mouseup', (e) => { e.preventDefault(); handle(false); });
         });
     }
 }
 
-// Ensure the class is instantiated
-window.CodaApp = new CodaRom();
+window.addEventListener('DOMContentLoaded', () => {
+    window.CodaApp = new CodaRom();
+});

@@ -3,22 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CodaRom v0.4 | Mobile IDE</title>
+    <title>CodaRom | Mobile ROM IDE</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <div class="brand"><h1>CodaRom <span>v0.4</span></h1></div>
+        <div class="brand">
+            <h1>CodaRom <span>v0.4</span></h1>
+        </div>
         <div class="actions">
-            <input type="file" id="romUpload" accept=".gb,.gbc">
+            <input type="file" id="romUpload" accept=".gb,.gbc" style="display:none">
+            <button class="primary-btn" onclick="document.getElementById('romUpload').click()">Load ROM</button>
             <button id="exportIps" class="primary-btn">Export IPS</button>
         </div>
     </header>
 
     <main>
         <div class="toolbar">
-            <label>Jump to Bank:</label>
-            <select id="bankSelect"><option>Load ROM...</option></select>
+            <label for="bankSelect">Bank Explorer:</label>
+            <select id="bankSelect">
+                <option value="">Waiting for ROM...</option>
+            </select>
         </div>
 
         <section id="editorContainer">
@@ -28,8 +33,9 @@
             </div>
             
             <div id="emuView" class="tab-content">
-                <div class="emu-wrap">
+                <div class="emu-screen-container">
                     <canvas id="emuCanvas"></canvas>
+                    
                     <div id="touchControls">
                         <div class="dpad">
                             <button id="btn-up" class="ctrl">▲</button>
@@ -39,7 +45,7 @@
                             </div>
                             <button id="btn-down" class="ctrl">▼</button>
                         </div>
-                        <div class="actions-group">
+                        <div class="action-buttons">
                             <button id="btn-b" class="ctrl-round">B</button>
                             <button id="btn-a" class="ctrl-round">A</button>
                         </div>
@@ -49,13 +55,17 @@
             </div>
 
             <div id="gfxView" class="tab-content hidden">
-                <canvas id="tileCanvas"></canvas>
+                <div class="gfx-wrapper">
+                    <canvas id="tileCanvas"></canvas>
+                </div>
             </div>
         </section>
     </main>
 
+    <script src="lib/XAudioServer.js"></script>
     <script src="lib/GameBoyCore.js"></script>
     <script src="lib/GameBoyIO.js"></script>
+    
     <script src="js/app.js" type="module"></script>
 </body>
 </html>

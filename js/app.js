@@ -7,20 +7,21 @@ export class CodaRom {
         this.workingBuffer = null;
         this.currentBankOffset = 0;
         this.viewer = new VRAMViewer('tileCanvas');
-        this.gb = null; // Emulator instance
+        this.gb = null;
         this.init();
     }
 
     init() {
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            this.originalBuffer = new Uint8Array(await file.arrayBuffer());
+            const buf = await file.arrayBuffer();
+            this.originalBuffer = new Uint8Array(buf);
             this.workingBuffer = new Uint8Array([...this.originalBuffer]);
             this.populateBankList();
             this.loadBank(0);
         });
 
-        // Tab Management
+        // Tab Switching Logic
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
@@ -30,32 +31,21 @@ export class CodaRom {
             });
         });
 
-        // Emulator Boot
-        document.getElementById('runRom').addEventListener('click', () => this.bootEmulator());
-
-        // Setup Touch Controls
+        document.getElementById('runRom').onclick = () => this.bootEmulator();
         this.bindTouchControls();
-
-        // GFX Editing
-        document.getElementById('tileCanvas').addEventListener('mousedown', (e) => {
-            const { offset, bitPos } = this.viewer.getRomOffsetFromMouse(e, this.currentBankOffset);
-            this.workingBuffer[offset] ^= (1 << bitPos);
-            document.getElementById('inspectAddr').textContent = `0x${offset.toString(16)}`;
-            this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
-        });
     }
 
     bootEmulator() {
-        if (!this.workingBuffer) return alert("Load ROM first");
+        if (!this.workingBuffer) return;
         const canvas = document.getElementById('emuCanvas');
         
-        // Initialize GameBoy-Online Core
-        // Standard parameters: canvas, rom, skip-boot-animation, palette-settings
+        // Initialize the Core
         this.gb = new GameBoyCore(canvas, "");
         this.gb.start(this.workingBuffer);
         
-        // Set an interval to drive the emulator frame rate
-        setInterval(() => { this.gb.run(); }, 16); 
+        // Clear any existing intervals
+        if (this.emuLoop) clearInterval(this.emuLoop);
+        this.emuLoop = setInterval(() => { this.gb.run(); }, 16);
     }
 
     bindTouchControls() {
@@ -66,11 +56,13 @@ export class CodaRom {
 
         Object.keys(keyMap).forEach(id => {
             const btn = document.getElementById(id);
-            const press = () => { if(this.gb) this.gb.JoyPadEvent(keyMap[id], true); };
-            const release = () => { if(this.gb) this.gb.JoyPadEvent(keyMap[id], false); };
+            if (!btn) return;
             
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); press(); });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); release(); });
+            const press = (e) => { e.preventDefault(); if(this.gb) this.gb.JoyPadEvent(keyMap[id], true); };
+            const release = (e) => { e.preventDefault(); if(this.gb) this.gb.JoyPadEvent(keyMap[id], false); };
+            
+            btn.addEventListener('touchstart', press);
+            btn.addEventListener('touchend', release);
             btn.addEventListener('mousedown', press);
             btn.addEventListener('mouseup', release);
         });
@@ -82,7 +74,8 @@ export class CodaRom {
         const bankCount = Math.ceil(this.originalBuffer.length / 0x4000);
         for (let i = 0; i < bankCount; i++) {
             const li = document.createElement('li');
-            li.textContent = `Bank ${i.toString(16).toUpperCase()}`;
+            li.textContent = `Bank 0x${i.toString(16).toUpperCase()}`;
+            li.id = `bank-${i}`;
             li.onclick = () => this.loadBank(i);
             list.appendChild(li);
         }
@@ -91,6 +84,8 @@ export class CodaRom {
     loadBank(idx) {
         this.currentBankOffset = idx * 0x4000;
         this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
+        document.querySelectorAll('#bankList li').forEach(li => li.classList.remove('active-bank'));
+        document.getElementById(`bank-${idx}`).classList.add('active-bank');
     }
 }
 

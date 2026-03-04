@@ -1,5 +1,5 @@
 import { VRAMViewer } from './vram_viewer.js';
-import { Patcher } from './patcher.js'; // Assuming the patcher logic is in patcher.js
+import { Patcher } from './patcher.js';
 
 export class CodaRom {
     constructor() {
@@ -7,22 +7,23 @@ export class CodaRom {
         this.workingBuffer = null;
         this.currentBankOffset = 0x0000;
         this.viewer = new VRAMViewer('tileCanvas');
+        this.emulator = null;
         this.init();
     }
 
     init() {
-        // ROM Upload
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
-            const arrayBuffer = await file.arrayBuffer();
-            this.originalBuffer = new Uint8Array(arrayBuffer);
-            this.workingBuffer = new Uint8Array([...this.originalBuffer]); // Clone buffer
+            const buffer = await file.arrayBuffer();
+            this.originalBuffer = new Uint8Array(buffer);
+            this.workingBuffer = new Uint8Array([...this.originalBuffer]);
             
             this.populateBankList();
             this.loadBank(0);
+            console.log("ROM Ready for Analysis");
         });
 
-        // Tab Switching
+        // Tab Management
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
@@ -32,55 +33,62 @@ export class CodaRom {
             });
         });
 
-        // Click-to-Edit Logic
-        document.getElementById('tileCanvas').addEventListener('click', (e) => {
+        // Pixel Editor + Inspector QoL
+        document.getElementById('tileCanvas').addEventListener('mousedown', (e) => {
             if (!this.workingBuffer) return;
-
             const { offset, bitPos } = this.viewer.getRomOffsetFromMouse(e, this.currentBankOffset);
             
-            // Simple logic: Flip the bits in the working buffer to change color
-            // This modifies the low-bit byte. 
+            // Modify Buffer
             this.workingBuffer[offset] ^= (1 << bitPos);
             
-            // Re-render immediately to show visual change
+            // Update UI Inspector
+            document.getElementById('inspectAddr').textContent = `0x${offset.toString(16).toUpperCase()}`;
+            document.getElementById('inspectVal').textContent = `0x${this.workingBuffer[offset].toString(16).toUpperCase()}`;
+            
             this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
-            console.log(`Modified ROM at Address: 0x${offset.toString(16).toUpperCase()}`);
         });
 
-        // IPS Export
+        // Emulator Trigger
+        document.getElementById('runRom').addEventListener('click', () => {
+            if (!this.workingBuffer) return alert("Upload a ROM first");
+            this.startEmulator();
+        });
+
         document.getElementById('exportIps').onclick = () => {
-            if (!this.originalBuffer) return alert("Please load a ROM first!");
             const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
-            Patcher.downloadPatch(patch, "CodaRom_Upgrade.ips");
+            Patcher.downloadPatch(patch);
         };
+    }
+
+    startEmulator() {
+        const canvas = document.getElementById('emuCanvas');
+        // Initialize Binjgb Emulator with workingBuffer
+        if (window.binjgb) {
+            window.binjgb.run(this.workingBuffer, canvas);
+        } else {
+            alert("Emulator library still loading...");
+        }
     }
 
     populateBankList() {
         const list = document.getElementById('bankList');
-        list.innerHTML = ""; // Clear existing
-        const bankSize = 0x4000; // 16KB Banks
-        const bankCount = Math.ceil(this.originalBuffer.length / bankSize);
-
+        list.innerHTML = "";
+        const bankCount = Math.ceil(this.originalBuffer.length / 0x4000);
         for (let i = 0; i < bankCount; i++) {
             const li = document.createElement('li');
             li.textContent = `Bank 0x${i.toString(16).toUpperCase()}`;
-            li.style.cursor = "pointer";
             li.onclick = () => this.loadBank(i);
             list.appendChild(li);
         }
     }
 
-    loadBank(bankIndex) {
-        this.currentBankOffset = bankIndex * 0x4000;
+    loadBank(idx) {
+        this.currentBankOffset = idx * 0x4000;
         this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
-        
-        // Update UI styling
-        const items = document.querySelectorAll('#bankList li');
-        items.forEach((item, idx) => {
-            item.style.color = idx === bankIndex ? "#00ff41" : "#888";
+        document.querySelectorAll('#bankList li').forEach((el, i) => {
+            el.className = i === idx ? 'active-bank' : '';
         });
     }
 }
 
-// Initialize the App
 new CodaRom();

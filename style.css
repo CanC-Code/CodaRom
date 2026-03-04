@@ -1,57 +1,101 @@
+:root {
+    --bg: #0f0f0f;
+    --panel: #1a1a1a;
+    --accent: #00ff41;
+    --text: #e0e0e0;
+}
+
 body {
-    background: #121212;
-    color: #00ff41;
-    font-family: 'Courier New', Courier, monospace;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     margin: 0;
+    height: 100vh;
     display: flex;
     flex-direction: column;
-    height: 100vh;
 }
 
 header {
-    background: #1a1a1a;
-    padding: 1rem;
+    background: var(--panel);
+    padding: 10px 20px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 2px solid #333;
+    border-bottom: 1px solid #333;
 }
 
-main {
-    display: flex;
-    flex: 1;
-}
+main { display: flex; flex: 1; overflow: hidden; }
 
 #sidebar {
-    width: 250px;
-    background: #181818;
+    width: 220px;
+    background: var(--panel);
     border-right: 1px solid #333;
     overflow-y: auto;
 }
 
-#editorContainer {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+.sidebar-header {
+    padding: 15px;
+    font-weight: bold;
+    color: var(--accent);
+    text-transform: uppercase;
 }
 
-.tab-btn {
-    background: #222;
-    color: #888;
-    border: none;
-    padding: 10px 20px;
+#bankList li {
+    padding: 8px 15px;
+    list-style: none;
     cursor: pointer;
+    font-size: 13px;
+    color: #888;
 }
 
-.tab-btn.active {
-    background: #333;
-    color: #00ff41;
-    border-bottom: 2px solid #00ff41;
-}
+#bankList li:hover { background: #252525; }
+.active-bank { color: var(--accent) !important; background: #222; }
 
+#editorContainer { flex: 1; display: flex; flex-direction: column; }
+
+.tabs { background: #111; display: flex; }
+.tab-btn {
+    background: none; border: none; color: #666;
+    padding: 12px 25px; cursor: pointer;
+}
+.tab-btn.active { color: var(--accent); border-bottom: 2px solid var(--accent); }
+
+.tab-content { flex: 1; overflow: auto; padding: 20px; }
 .hidden { display: none; }
 
-#asmOutput {
+.view-wrapper { display: flex; gap: 20px; }
+
+#inspector {
+    background: var(--panel);
     padding: 20px;
-    line-height: 1.5;
+    border-radius: 8px;
+    width: 200px;
+    height: fit-content;
+}
+
+#tileCanvas { image-rendering: pixelated; border: 1px solid #333; cursor: crosshair; }
+
+.emu-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 15px;
+}
+
+#emuCanvas {
+    width: 320px; /* 2x GBC resolution */
+    height: 288px;
+    background: #000;
+    border: 4px solid #333;
+    image-rendering: pixelated;
+}
+
+.primary-btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 8px 15px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
 }

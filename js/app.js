@@ -111,35 +111,38 @@ export class CodaRom {
         try {
             console.log("Analyzing Header & Preparing Buffer...");
             
-            // 1. Calculate required size from Header [0x0148]
-            // Game Boy ROMs are 32KB * (2 ^ sizeCode)
             const sizeCode = this.workingBuffer[0x0148];
             const expectedSize = 32768 << sizeCode;
             
             let bootBuffer = this.workingBuffer;
 
-            // 2. Auto-Padding for Trimmed ROMs
             if (this.workingBuffer.length < expectedSize) {
                 console.warn(`Padding ROM: ${this.workingBuffer.length} -> ${expectedSize}`);
                 bootBuffer = new Uint8Array(expectedSize);
-                bootBuffer.fill(0xFF); // Fill with standard empty ROM data
+                bootBuffer.fill(0xFF);
                 bootBuffer.set(this.workingBuffer);
             }
 
-            // 3. Setup Canvas and Core
             canvas.width = 160;
             canvas.height = 144;
+            
+            // Initialize Core
             this.gb = new window.GameBoyCore(canvas, "");
             
-            // 4. Force GBC Mode for Pokemon Crystal
-            // Offset 0x0143: 0x80 or 0xC0 indicates GBC support
+            // Fix: Manual CGB detection if toggleGBC function is missing
             const cgbFlag = this.workingBuffer[0x0143];
             if (cgbFlag === 0x80 || cgbFlag === 0xC0) {
-                console.log("GBC Flag detected, enabling Color mode.");
-                this.gb.toggleGBC(true);
+                console.log("CGB Flag detected. Adjusting preferences...");
+                // Attempt to set GBC mode via internal preference if the function is missing
+                if (typeof this.gb.toggleGBC === 'function') {
+                    this.gb.toggleGBC(true);
+                } else {
+                    // Fallback for older cores: many use an internal 'gbc' or 'color' flag
+                    this.gb.cgb = true; 
+                    this.gb.useGBC = true;
+                }
             }
 
-            // 5. Start Engine
             this.gb.start(bootBuffer);
             
             const emuStep = () => {

@@ -1,27 +1,196 @@
-/* Ensure the body takes up exactly the viewport height */
-body {
-    margin: 0;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden; /* Prevent global scrolling */
+:root { 
+    --accent: #00ff41; 
+    --bg: #0f0f0f; 
+    --panel: #1a1a1a;
+    --btn-active: #252525;
 }
 
-/* Constrain the main editor area */
-main {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    height: calc(100vh - 60px); /* Adjust for header height */
-    overflow: hidden;
+/* Base Layout - Prevents the "Exploding" vertical screen */
+html, body { 
+    margin: 0; 
+    padding: 0; 
+    height: 100vh; 
+    width: 100vw; 
+    overflow: hidden; /* Critical: Stops the whole page from scrolling */
+    background: var(--bg);
+    color: white;
+    font-family: 'Segoe UI', Tahoma, sans-serif;
 }
 
-/* The tab content must be scrollable internally if needed */
-.tab-content {
+header {
+    height: 60px;
+    background: var(--panel);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    border-bottom: 1px solid #333;
+    box-sizing: border-box;
+    z-index: 10;
+}
+
+.brand h1 { font-size: 1.2rem; color: var(--accent); margin: 0; }
+.brand span { font-size: 0.8rem; color: #888; margin-left: 5px; }
+
+main { 
+    display: flex; 
+    flex-direction: column;
+    height: calc(100vh - 60px); /* Fill exactly what is left of the screen */
+}
+
+/* Toolbar Area for Dropdown */
+.toolbar {
+    background: #111;
+    padding: 10px 20px;
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    border-bottom: 1px solid #222;
+}
+
+.toolbar label { font-size: 0.8rem; color: #888; text-transform: uppercase; }
+
+#bankSelect {
+    background: #222;
+    color: var(--accent);
+    border: 1px solid #444;
+    padding: 8px;
+    border-radius: 4px;
+    font-family: monospace;
     flex: 1;
-    overflow-y: auto;
-    padding: 20px;
+    max-width: 300px;
+}
+
+/* Editor Container & Navigation Tabs */
+#editorContainer { 
+    flex: 1; 
+    display: flex; 
+    flex-direction: column; 
+    overflow: hidden; 
+}
+
+.tabs { 
+    display: flex; 
+    background: #000; 
+    height: 50px; 
+    border-bottom: 1px solid #222;
+}
+
+.tab-btn { 
+    flex: 1; 
+    border: none; 
+    background: none; 
+    color: #666; 
+    cursor: pointer; 
+    font-weight: bold;
+    transition: 0.2s;
+}
+
+.tab-btn.active { 
+    color: var(--accent); 
+    border-bottom: 2px solid var(--accent); 
+    background: var(--btn-active);
+}
+
+/* Individual View Logic */
+.tab-content { 
+    flex: 1; 
+    overflow-y: auto; /* Content scrolls inside here, not the whole page */
+    padding: 15px; 
     display: flex;
     flex-direction: column;
     align-items: center;
+}
+
+.hidden { display: none !important; }
+
+/* Emulator Display Logic */
+.emu-screen-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
+#emuCanvas {
+    width: 160px; /* Internal GBC resolution */
+    height: 144px;
+    background: #000;
+    image-rendering: pixelated; /* Sharp pixels for retro look */
+    transform: scale(1.8); /* Scale up visually for mobile/desktop view */
+    margin: 60px 0; /* Space for the scale transform */
+    border: 2px solid #333;
+}
+
+.run-btn {
+    width: 90%;
+    max-width: 400px;
+    padding: 15px;
+    background: var(--accent);
+    color: black;
+    border: none;
+    font-weight: bold;
+    border-radius: 4px;
+    cursor: pointer;
+    margin-bottom: 20px;
+    text-transform: uppercase;
+}
+
+/* Graphics / VRAM Logic */
+#tileCanvas {
+    image-rendering: pixelated;
+    border: 1px solid #444;
+    background: #000;
+    cursor: crosshair;
+}
+
+/* Mobile-Friendly Touch Controls */
+#touchControls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+    max-width: 450px;
+    padding: 25px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 20px;
+    margin-top: auto; /* Push to the bottom of the container */
+}
+
+.dpad { display: grid; grid-template-areas: ". up ." "left . right" ". down ."; gap: 8px; }
+#btn-up { grid-area: up; }
+#btn-down { grid-area: down; }
+#btn-left { grid-area: left; }
+#btn-right { grid-area: right; }
+
+.ctrl { 
+    width: 48px; height: 48px; 
+    background: #333; border: 1px solid #555; 
+    color: white; border-radius: 8px; 
+    font-size: 1.2rem;
+}
+
+.action-buttons { display: flex; gap: 20px; }
+.ctrl-round { 
+    width: 60px; height: 60px; 
+    border-radius: 50%; 
+    background: #800; border: 2px solid #a22; 
+    color: white; font-weight: bold;
+    box-shadow: 0 4px #400;
+    font-size: 1.1rem;
+}
+
+.ctrl-round:active { 
+    transform: translateY(3px); 
+    box-shadow: none; 
+}
+
+.primary-btn {
+    background: var(--accent);
+    color: black;
+    border: none;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-weight: bold;
+    cursor: pointer;
 }

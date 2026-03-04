@@ -8,13 +8,12 @@ export class CodaRom {
         this.currentBankOffset = 0;
         this.viewer = new VRAMViewer('tileCanvas');
         this.gb = null;
-        this.emuLoop = null;
+        this.emuLoop = null; // Changed to hold requestAnimationFrame ID
         this.init();
     }
 
     /**
      * Diagnostic tool to verify that scripts in /lib/ are actually loaded.
-     * Updated to check for specific GameBoy-Online class constructors.
      */
     async runHealthCheck() {
         console.log("--- CodaRom System Health Check ---");
@@ -36,7 +35,7 @@ export class CodaRom {
         console.table(results);
 
         if (missing.length > 0) {
-            const msg = `CRITICAL ERROR: The following files failed to load from /lib/:\n\n${missing.join('\n')}\n\nCheck your file paths and case-sensitivity!`;
+            const msg = `CRITICAL ERROR: Missing dependencies:\n\n${missing.join('\n')}\n\nCheck folder naming (lib vs libs) and case-sensitivity.`;
             alert(msg);
             return false;
         }
@@ -44,19 +43,14 @@ export class CodaRom {
     }
 
     async init() {
-        // Run health check. If libraries are missing, we stop here to prevent silent crashes.
         const healthy = await this.runHealthCheck();
-        if (!healthy) {
-            console.error("Initialization aborted due to missing dependencies.");
-            return;
-        }
+        if (!healthy) return;
 
         // ROM Upload
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
 
-            // Simple UI feedback during load
             const label = document.querySelector('label[for="bankSelect"]');
             label.textContent = "Loading ROM...";
 
@@ -69,7 +63,7 @@ export class CodaRom {
                 this.loadBank(0);
                 
                 label.textContent = "Bank Explorer:";
-                console.log("ROM Buffer ready for editing.");
+                console.log("ROM Ready.");
             } catch (err) {
                 console.error("ROM Load Error:", err);
                 label.textContent = "Load Failed!";
@@ -102,12 +96,8 @@ export class CodaRom {
         // IPS Export
         document.getElementById('exportIps').addEventListener('click', () => {
             if (!this.originalBuffer || !this.workingBuffer) return;
-            try {
-                const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
-                Patcher.downloadPatch(patch, "CodaRom_v04.ips");
-            } catch (err) {
-                alert("IPS Generation failed: " + err.message);
-            }
+            const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
+            Patcher.downloadPatch(patch, "CodaRom_v04.ips");
         });
 
         this.bindTouchControls();
@@ -128,28 +118,47 @@ export class CodaRom {
     loadBank(idx) {
         this.currentBankOffset = idx * 0x4000;
         document.getElementById('bankSelect').value = idx;
-        // Trigger the VRAM viewer to render the tiles for the selected bank
         this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
     }
 
     bootEmulator() {
         const canvas = document.getElementById('emuCanvas');
-        if (this.emuLoop) clearInterval(this.emuLoop);
+        
+        // Stop any existing loop
+        if (this.emuLoop) {
+            cancelAnimationFrame(this.emuLoop);
+        }
 
         try {
-            // Instantiate the GameBoyCore from the global window scope
+            console.log("Starting Emulator Boot Sequence...");
+
+            // Ensure the canvas is correctly sized
+            canvas.width = 160;
+            canvas.height = 144;
+
+            // Instantiate Core
+            // Note: Some versions of GameBoyCore require the canvas, 
+            // and an optional "options" object or rom string.
             this.gb = new window.GameBoyCore(canvas, "");
+            
+            // Start the core with the buffer
             this.gb.start(this.workingBuffer);
             
-            // Run at ~60 FPS
-            this.emuLoop = setInterval(() => {
-                this.gb.run();
-            }, 16);
+            // Animation loop using requestAnimationFrame for better mobile performance
+            const emuStep = () => {
+                if (this.gb) {
+                    this.gb.run();
+                    this.emuLoop = requestAnimationFrame(emuStep);
+                }
+            };
+
+            this.emuLoop = requestAnimationFrame(emuStep);
+            console.log("✅ Emulator engine live.");
             
-            console.log("Emulator engine started with working buffer.");
         } catch (err) {
             console.error("Emulator Crash:", err);
-            alert("Emulator Boot Failed! Check the console for internal engine errors.");
+            // If the error is still {}, try to stringify or log the keys
+            alert("Boot Failed! " + (err.message || "Unknown Core Error"));
         }
     }
 
@@ -167,17 +176,15 @@ export class CodaRom {
                 if (this.gb) this.gb.JoyPadEvent(code, isPressed);
             };
 
-            // Prevent default to stop scrolling/zooming while playing
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(true); });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction(false); });
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(true); }, {passive: false});
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction(false); }, {passive: false});
             btn.addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(true); });
             btn.addEventListener('mouseup', (e) => { e.preventDefault(); handleAction(false); });
-            btn.addEventListener('mouseleave', (e) => { if(this.gb) handleAction(false); });
+            btn.addEventListener('mouseleave', (e) => { handleAction(false); });
         });
     }
 }
 
-// Global Startup
 window.addEventListener('DOMContentLoaded', () => { 
     window.App = new CodaRom(); 
 });

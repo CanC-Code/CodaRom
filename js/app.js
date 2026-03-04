@@ -13,18 +13,13 @@ export class CodaRom {
     }
 
     async runHealthCheck() {
-        console.log("--- CodaRom System Health Check ---");
         const requirements = [
             { name: "GameBoyCore.js", check: () => typeof window.GameBoyCore === 'function' },
             { name: "GameBoyIO.js", check: () => typeof window.GameBoyKeyInput === 'function' || (window.GameBoyCore && window.GameBoyCore.prototype.JoyPadEvent) },
             { name: "XAudioServer.js", check: () => typeof window.XAudioServer === 'function' }
         ];
-
         let missing = [];
-        requirements.forEach(lib => {
-            if (!lib.check()) missing.push(lib.name);
-        });
-
+        requirements.forEach(lib => { if (!lib.check()) missing.push(lib.name); });
         if (missing.length > 0) {
             alert(`Missing dependencies: ${missing.join(', ')}`);
             return false;
@@ -41,22 +36,40 @@ export class CodaRom {
             if (!file) return;
 
             const label = document.querySelector('label[for="bankSelect"]');
-            label.textContent = "Loading ROM...";
+            label.textContent = "Processing ROM...";
 
             try {
-                const buf = await file.arrayBuffer();
-                this.originalBuffer = new Uint8Array(buf);
+                const arrayBuffer = await file.arrayBuffer();
+                let tempBuffer = new Uint8Array(arrayBuffer);
+
+                // --- GLOBAL PADDING LOGIC ---
+                // We fix the size HERE so every part of the app sees a valid ROM
+                const sizeCode = tempBuffer[0x0148];
+                const expectedSize = 32768 << sizeCode;
+
+                if (tempBuffer.length < expectedSize) {
+                    console.log(`Auto-repairing ROM size: ${tempBuffer.length} -> ${expectedSize}`);
+                    const padded = new Uint8Array(expectedSize);
+                    padded.fill(0xFF);
+                    padded.set(tempBuffer);
+                    tempBuffer = padded;
+                }
+
+                this.originalBuffer = tempBuffer;
                 this.workingBuffer = new Uint8Array([...this.originalBuffer]);
                 
                 this.populateBankDropdown();
                 this.loadBank(0);
                 
                 label.textContent = "Bank Explorer:";
+                console.log("ROM loaded and verified.");
             } catch (err) {
-                label.textContent = "Load Failed!";
+                console.error(err);
+                label.textContent = "Load Error!";
             }
         });
 
+        // Tab and UI logic
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.target.dataset.tab;
@@ -89,7 +102,7 @@ export class CodaRom {
     populateBankDropdown() {
         const select = document.getElementById('bankSelect');
         select.innerHTML = "";
-        const count = Math.ceil(this.originalBuffer.length / 0x4000);
+        const count = Math.ceil(this.workingBuffer.length / 0x4000);
         for (let i = 0; i < count; i++) {
             const opt = document.createElement('option');
             opt.value = i;
@@ -109,41 +122,25 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            console.log("Analyzing Header & Preparing Buffer...");
-            
-            const sizeCode = this.workingBuffer[0x0148];
-            const expectedSize = 32768 << sizeCode;
-            
-            let bootBuffer = this.workingBuffer;
-
-            if (this.workingBuffer.length < expectedSize) {
-                console.warn(`Padding ROM: ${this.workingBuffer.length} -> ${expectedSize}`);
-                bootBuffer = new Uint8Array(expectedSize);
-                bootBuffer.fill(0xFF);
-                bootBuffer.set(this.workingBuffer);
-            }
-
             canvas.width = 160;
             canvas.height = 144;
             
-            // Initialize Core
+            // Initialize the engine
             this.gb = new window.GameBoyCore(canvas, "");
             
-            // Fix: Manual CGB detection if toggleGBC function is missing
+            // Manual GBC check and fallback
             const cgbFlag = this.workingBuffer[0x0143];
             if (cgbFlag === 0x80 || cgbFlag === 0xC0) {
-                console.log("CGB Flag detected. Adjusting preferences...");
-                // Attempt to set GBC mode via internal preference if the function is missing
                 if (typeof this.gb.toggleGBC === 'function') {
                     this.gb.toggleGBC(true);
                 } else {
-                    // Fallback for older cores: many use an internal 'gbc' or 'color' flag
-                    this.gb.cgb = true; 
+                    this.gb.cgb = true;
                     this.gb.useGBC = true;
                 }
             }
 
-            this.gb.start(bootBuffer);
+            // Start using our pre-processed workingBuffer
+            this.gb.start(this.workingBuffer);
             
             const emuStep = () => {
                 if (this.gb) {
@@ -152,10 +149,11 @@ export class CodaRom {
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
+            console.log("Emulator Running.");
             
         } catch (err) {
-            console.error("Boot Error:", err);
-            alert("Boot Failed: " + (err.message || "Invalid ROM Structure"));
+            console.error(err);
+            alert("Boot Failed: " + (err.message || "Engine Error"));
         }
     }
 
@@ -167,11 +165,11 @@ export class CodaRom {
         Object.entries(keys).forEach(([id, code]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            const handleAction = (isPressed) => { if (this.gb) this.gb.JoyPadEvent(code, isPressed); };
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(true); }, {passive: false});
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction(false); }, {passive: false});
-            btn.addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(true); });
-            btn.addEventListener('mouseup', (e) => { e.preventDefault(); handleAction(false); });
+            const handle = (v) => { if (this.gb) this.gb.JoyPadEvent(code, v); };
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handle(true); }, {passive: false});
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); handle(false); }, {passive: false});
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); handle(true); });
+            btn.addEventListener('mouseup', (e) => { e.preventDefault(); handle(false); });
         });
     }
 }

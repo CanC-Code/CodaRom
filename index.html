@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>CodaRom | Mobile IDE</title>
+    <title>CodaRom v0.4 | Mobile IDE</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -16,21 +16,19 @@
     </header>
 
     <main>
-        <section id="editorContainer">
-            <div class="toolbar">
-                <label for="bankSelect">Jump to Bank:</label>
-                <select id="bankSelect">
-                    <option value="">No ROM Loaded</option>
-                </select>
-            </div>
+        <div class="toolbar">
+            <label>Jump to Bank:</label>
+            <select id="bankSelect"><option>Load ROM...</option></select>
+        </div>
 
+        <section id="editorContainer">
             <div class="tabs">
-                <button class="tab-btn active" data-tab="emu">Live Emulator</button>
+                <button class="tab-btn active" data-tab="emu">Emulator</button>
                 <button class="tab-btn" data-tab="gfx">Graphics</button>
             </div>
             
             <div id="emuView" class="tab-content">
-                <div class="emu-screen-container">
+                <div class="emu-wrap">
                     <canvas id="emuCanvas"></canvas>
                     <div id="touchControls">
                         <div class="dpad">
@@ -41,7 +39,7 @@
                             </div>
                             <button id="btn-down" class="ctrl">▼</button>
                         </div>
-                        <div class="action-buttons">
+                        <div class="actions-group">
                             <button id="btn-b" class="ctrl-round">B</button>
                             <button id="btn-a" class="ctrl-round">A</button>
                         </div>

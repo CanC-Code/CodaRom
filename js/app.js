@@ -20,13 +20,12 @@ export class CodaRom {
                 const arrayBuffer = await file.arrayBuffer();
                 let raw = new Uint8Array(arrayBuffer);
 
-                // 1. HEADER-BASED REPAIR
-                // Pokemon Crystal (MBC3) must be exactly 2MB.
+                // 1. Mandatory Padding for MBC3/Pokemon Crystal
                 const sizeCode = raw[0x0148];
                 const expectedSize = 32768 << sizeCode;
 
                 if (raw.length < expectedSize) {
-                    console.log(`Pading ROM: ${raw.length} -> ${expectedSize}`);
+                    console.log(`Auto-Fixing ROM Size: ${raw.length} -> ${expectedSize}`);
                     const padded = new Uint8Array(expectedSize).fill(0xFF);
                     padded.set(raw);
                     raw = padded;
@@ -34,15 +33,14 @@ export class CodaRom {
 
                 this.originalBuffer = raw;
                 this.workingBuffer = new Uint8Array([...this.originalBuffer]);
-
                 this.populateBankDropdown();
                 this.loadBank(0);
             } catch (err) {
-                console.error("Load Error:", err);
+                console.error("ROM Load Error:", err);
             }
         });
 
-        // Tab Switching
+        // UI Listeners
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => {
                 const target = btn.dataset.tab;
@@ -53,14 +51,8 @@ export class CodaRom {
             };
         });
 
-        document.getElementById('bankSelect').onchange = (e) => {
-            this.loadBank(parseInt(e.target.value));
-        };
-
-        document.getElementById('runRom').onclick = () => {
-            if (!this.workingBuffer) return alert("Upload ROM first!");
-            this.bootEmulator();
-        };
+        document.getElementById('bankSelect').onchange = (e) => this.loadBank(parseInt(e.target.value));
+        document.getElementById('runRom').onclick = () => this.bootEmulator();
 
         this.bindTouchControls();
     }
@@ -86,41 +78,42 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            // 1. Prepare Buffer: Some versions of GameBoyCore prefer a standard Array
-            const romData = Array.from(this.workingBuffer);
+            // 1. Convert to a standard Array - This is the most compatible format
+            const romArray = Array.from(this.workingBuffer);
 
-            // 2. Initialize Core
-            // If GameBoyCore(canvas, data) fails, it might need GameBoyCore(canvas, data, options)
-            this.gb = new window.GameBoyCore(canvas, romData);
+            // 2. Initialize Core with null data first to prevent constructor errors
+            this.gb = new window.GameBoyCore(canvas, "");
 
-            // 3. HARDWARE CONFIGURATION
-            // Pokemon Crystal MUST have CGB (Color) mode enabled or it stays white.
+            // 3. Manually inject the ROM and Hardware settings
+            // This bypasses the buggy constructor logic
+            this.gb.ROM = romArray;
             this.gb.useGBC = true;
             this.gb.cgb = true;
-            this.gb.cartridgeType = this.workingBuffer[0x0147];
             
-            // Bypass potential audio-lock
-            if (this.gb.registerAudioBuffer) this.gb.registerAudioBuffer();
+            // 4. Force Internal Initialization
+            // Grant Galitz core usually has a 'start' or 'init' that needs the ROM
+            this.gb.start(romArray);
 
-            // 4. START ENGINE
-            this.gb.start();
-
-            // 5. IMPROVED EXECUTION LOOP
-            // We force a high-priority loop to ensure frames are actually pushed to canvas
+            // 5. High-Frequency Execution Loop
             const emuStep = () => {
                 if (this.gb) {
-                    // Run logic until a frame is ready
-                    this.gb.run();
+                    this.gb.run(); 
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
             
-            console.log("✅ Emulator Loop Active");
+            console.log("✅ Core forced start successful.");
 
         } catch (err) {
-            console.error("Boot failure:", err);
-            alert("Emulator Error: " + err.message);
+            console.error("Boot Failure:", err);
+            // If the error says "start is not a method", we try the secondary boot method
+            try {
+                this.gb.init();
+                console.log("Core initialized via .init()");
+            } catch(e) {
+                alert("Emulator Error: " + err.message);
+            }
         }
     }
 

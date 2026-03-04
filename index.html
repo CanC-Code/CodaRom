@@ -67,12 +67,17 @@
     </main>
 
     <script>
-        // Many legacy JS ports of C++ emulators use a global 'cout' object for logging
-        window.cout = {
-            print: function(msg) { console.log("CORE:", msg); },
-            println: function(msg) { console.log("CORE:", msg); },
-            write: function(msg) { console.log("CORE:", msg); }
-        };
+        // Define a function that also acts as an object with methods
+        var loggerShim = function(msg) { console.log("CORE:", msg); };
+        loggerShim.print = function(msg) { console.log("CORE:", msg); };
+        loggerShim.println = function(msg) { console.log("CORE:", msg); };
+        loggerShim.write = function(msg) { console.log("CORE:", msg); };
+        loggerShim.error = function(msg) { console.error("CORE ERROR:", msg); };
+
+        // Assign to common missing legacy variables
+        window.cout = loggerShim;
+        window.cerr = loggerShim;
+        window.console.debug = window.console.debug || loggerShim;
     </script>
 
     <script src="./lib/XAudioServer.js"></script>
@@ -81,12 +86,11 @@
 
     <script type="module">
         window.addEventListener('load', () => {
-            // Check if the Core loaded into the global scope
             if (typeof GameBoyCore === 'undefined') {
                 document.getElementById('systemStatus').style.display = 'block';
                 console.error("CRITICAL: GameBoyCore.js not found in ./lib/");
             } else {
-                console.log("SYSTEM: Dependencies verified.");
+                console.log("SYSTEM: Dependencies verified and Shims active.");
             }
         });
     </script>

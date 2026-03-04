@@ -35,7 +35,7 @@ export class CodaRom {
 
                 this.populateBankDropdown();
                 this.loadBank(0);
-                console.log("ROM Prepared.");
+                console.log("ROM Ready.");
             } catch (err) {
                 console.error("ROM Load Error:", err);
             }
@@ -57,6 +57,13 @@ export class CodaRom {
 
         document.getElementById('runRom').onclick = () => {
             if (!this.workingBuffer) return alert("Please upload a ROM first.");
+            
+            // CRITICAL: Resume Audio Context on user gesture
+            if (window.AudioContext || window.webkitAudioContext) {
+                const context = new (window.AudioContext || window.webkitAudioContext)();
+                if (context.state === 'suspended') context.resume();
+            }
+
             this.bootEmulator();
         };
 
@@ -84,47 +91,39 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            // 1. Convert Buffer to Binary String (Core requirement)
+            // 1. Setup Canvas dimensions
+            canvas.width = 160;
+            canvas.height = 144;
+
+            // 2. Convert to Binary String
             let binaryString = "";
-            const len = this.workingBuffer.length;
-            for (let i = 0; i < len; i++) {
+            for (let i = 0; i < this.workingBuffer.length; i++) {
                 binaryString += String.fromCharCode(this.workingBuffer[i]);
             }
 
-            // 2. Core Setup
+            // 3. Initialize Core
             this.gb = new window.GameBoyCore(canvas, binaryString);
             
-            // 3. Enable Color Mode Safely
-            // We check for the function, then fall back to common property names
-            if (typeof this.gb.toggleCGB === 'function') {
-                this.gb.toggleCGB(true);
-            } else if (typeof this.gb.toggleGBC === 'function') {
-                this.gb.toggleGBC(true);
-            } else {
-                // Direct property manipulation for legacy versions
-                this.gb.useGBC = true;
-                this.gb.cgb = true;
-                this.gb.isGBC = true;
-            }
-
-            // 4. Initialize Audio if available
-            if (this.gb.registerAudioBuffer) {
-                this.gb.registerAudioBuffer();
-            }
-
-            // 5. Start Engine
+            // 4. Force GBC Mode manually before start
+            this.gb.useGBC = true;
+            this.gb.cgb = true;
+            
+            // 5. Grant Galitz Core: Start and immediately trigger the run loop
             this.gb.start();
-
-            // 6. Execution Loop
+            
+            // 6. Robust Animation Loop
             const emuStep = () => {
                 if (this.gb) {
+                    // Execute frames until the internal buffer is satisfied
+                    // This bypasses the "white screen" caused by the engine 
+                    // waiting for an external timer that doesn't exist in mobile web
                     this.gb.run(); 
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
             
-            console.log("Emulator Started with Color Mode enabled.");
+            console.log("Boot sequence complete. Engine loop running.");
 
         } catch (err) {
             console.error("Boot Failure:", err);

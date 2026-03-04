@@ -2,12 +2,17 @@ name: Deploy CodaRom to Pages
 
 on:
   push:
-    branches: ["main"] # Runs every time you push to main
+    branches: ["main"]
 
 permissions:
   contents: read
   pages: write
   id-token: write
+
+# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
 
 jobs:
   deploy:
@@ -21,11 +26,15 @@ jobs:
 
       - name: Setup Pages
         uses: actions/configure-pages@v4
+      
+      # This step ensures your lib/ and js/ folders are recognized correctly
+      - name: Verify Workspace
+        run: ls -R .
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # Upload the entire repository
+          # Uploading the root ensures /lib, /js, index.html, and style.css are all included
           path: '.'
 
       - name: Deploy to GitHub Pages

@@ -2,15 +2,13 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CodaRom | Advanced ROM IDE</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>CodaRom | Mobile ROM IDE</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header>
-        <div class="brand">
-            <h1>CodaRom <span>v0.2</span></h1>
-        </div>
+        <div class="brand"><h1>CodaRom <span>v0.3</span></h1></div>
         <div class="actions">
             <input type="file" id="romUpload" accept=".gb,.gbc">
             <button id="exportIps" class="primary-btn">Export IPS</button>
@@ -19,46 +17,63 @@
 
     <main>
         <nav id="sidebar">
-            <div class="sidebar-header">ROM Explorer</div>
+            <div class="sidebar-header">Banks</div>
             <ul id="bankList"></ul>
         </nav>
 
         <section id="editorContainer">
             <div class="tabs">
                 <button class="tab-btn active" data-tab="emu">Live Emulator</button>
-                <button class="tab-btn" data-tab="gfx">Graphics (VRAM)</button>
-                <button class="tab-btn" data-tab="code">ASM Disassembly</button>
+                <button class="tab-btn" data-tab="gfx">Graphics</button>
             </div>
             
             <div id="emuView" class="tab-content">
-                <div class="emu-container">
+                <div class="emu-screen-container">
                     <canvas id="emuCanvas"></canvas>
-                    <div class="emu-controls">
-                        <button id="runRom">Run Working ROM</button>
-                        <p class="hint">Controls: Arrows, Z (A), X (B), Enter (Start), Shift (Select)</p>
+                    
+                    <div id="touchControls">
+                        <div class="dpad">
+                            <button id="btn-up" class="ctrl">▲</button>
+                            <div class="dpad-mid">
+                                <button id="btn-left" class="ctrl">◀</button>
+                                <button id="btn-right" class="ctrl">▶</button>
+                            </div>
+                            <button id="btn-down" class="ctrl">▼</button>
+                        </div>
+                        <div class="action-buttons">
+                            <button id="btn-b" class="ctrl-round">B</button>
+                            <button id="btn-a" class="ctrl-round">A</button>
+                        </div>
+                        <div class="system-buttons">
+                            <button id="btn-select" class="ctrl-flat">SELECT</button>
+                            <button id="btn-start" class="ctrl-flat">START</button>
+                        </div>
                     </div>
                 </div>
+                <button id="runRom" class="run-btn">Boot Working Buffer</button>
             </div>
 
             <div id="gfxView" class="tab-content hidden">
                 <div class="view-wrapper">
                     <canvas id="tileCanvas"></canvas>
                     <div id="inspector">
-                        <h3>Tile Inspector</h3>
-                        <p>Address: <span id="inspectAddr">-</span></p>
-                        <p>Value: <span id="inspectVal">-</span></p>
-                        <div id="tilePreview"></div>
+                        <h3>Inspector</h3>
+                        <p>Addr: <span id="inspectAddr">-</span></p>
+                        <div id="palette-pick">
+                            <div class="p-color" data-idx="0" style="background:#fff"></div>
+                            <div class="p-color" data-idx="1" style="background:#aaa"></div>
+                            <div class="p-color" data-idx="2" style="background:#555"></div>
+                            <div class="p-color" data-idx="3" style="background:#000"></div>
+                        </div>
                     </div>
                 </div>
-            </div>
-
-            <div id="codeView" class="tab-content hidden">
-                <div id="asmOutput">Disassembly logic initializing...</div>
             </div>
         </section>
     </main>
 
-    <script src="https://binjgb.github.io/binjgb/binjgb.js"></script>
+    <script src="https://taisel.github.io/GameBoy-Online/js/other/XAudioServer.js"></script>
+    <script src="https://taisel.github.io/GameBoy-Online/js/GameBoyCore.js"></script>
+    <script src="https://taisel.github.io/GameBoy-Online/js/GameBoyIO.js"></script>
     <script src="js/app.js" type="module"></script>
 </body>
 </html>

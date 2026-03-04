@@ -13,29 +13,30 @@ export class CodaRom {
     }
 
     /**
-     * Diagnostic tool to verify that scripts in /lib/ are actually loaded
+     * Diagnostic tool to verify that scripts in /lib/ are actually loaded.
+     * Updated to check for specific GameBoy-Online class constructors.
      */
     async runHealthCheck() {
         console.log("--- CodaRom System Health Check ---");
         const requirements = [
-            { name: "GameBoyCore.js", check: () => typeof window.GameBoyCore !== 'undefined' },
-            { name: "GameBoyIO.js", check: () => typeof window.GameBoyKeyInput !== 'undefined' },
-            { name: "XAudioServer.js", check: () => typeof window.XAudioServer !== 'undefined' }
+            { name: "GameBoyCore.js", check: () => typeof window.GameBoyCore === 'function' },
+            { name: "GameBoyIO.js", check: () => typeof window.GameBoyKeyInput === 'function' || (window.GameBoyCore && window.GameBoyCore.prototype.JoyPadEvent) },
+            { name: "XAudioServer.js", check: () => typeof window.XAudioServer === 'function' }
         ];
 
+        let results = [];
         let missing = [];
+
         requirements.forEach(lib => {
-            if (lib.check()) {
-                console.log(`✅ ${lib.name}: Loaded`);
-            } else {
-                console.warn(`❌ ${lib.name}: Missing from Global Scope`);
-                missing.push(lib.name);
-            }
+            const isLoaded = lib.check();
+            results.push({ Library: lib.name, Status: isLoaded ? "✅ Loaded" : "❌ Missing" });
+            if (!isLoaded) missing.push(lib.name);
         });
 
+        console.table(results);
+
         if (missing.length > 0) {
-            // Display error directly on UI for mobile QoL
-            const msg = `CRITICAL ERROR: Missing ${missing.join(', ')}. \n\nCheck if your folder is named 'lib' or 'libs'. Your HTML expects 'lib/'.`;
+            const msg = `CRITICAL ERROR: The following files failed to load from /lib/:\n\n${missing.join('\n')}\n\nCheck your file paths and case-sensitivity!`;
             alert(msg);
             return false;
         }
@@ -43,21 +44,39 @@ export class CodaRom {
     }
 
     async init() {
+        // Run health check. If libraries are missing, we stop here to prevent silent crashes.
         const healthy = await this.runHealthCheck();
-        if (!healthy) return;
+        if (!healthy) {
+            console.error("Initialization aborted due to missing dependencies.");
+            return;
+        }
 
         // ROM Upload
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
-            const buf = await file.arrayBuffer();
-            this.originalBuffer = new Uint8Array(buf);
-            this.workingBuffer = new Uint8Array([...this.originalBuffer]);
-            this.populateBankDropdown();
-            this.loadBank(0);
+
+            // Simple UI feedback during load
+            const label = document.querySelector('label[for="bankSelect"]');
+            label.textContent = "Loading ROM...";
+
+            try {
+                const buf = await file.arrayBuffer();
+                this.originalBuffer = new Uint8Array(buf);
+                this.workingBuffer = new Uint8Array([...this.originalBuffer]);
+                
+                this.populateBankDropdown();
+                this.loadBank(0);
+                
+                label.textContent = "Bank Explorer:";
+                console.log("ROM Buffer ready for editing.");
+            } catch (err) {
+                console.error("ROM Load Error:", err);
+                label.textContent = "Load Failed!";
+            }
         });
 
-        // Tabs
+        // Tabs Logic
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.target.dataset.tab;
@@ -68,19 +87,27 @@ export class CodaRom {
             });
         });
 
+        // Bank Selection
         document.getElementById('bankSelect').addEventListener('change', (e) => {
-            this.loadBank(parseInt(e.target.value));
+            const val = parseInt(e.target.value);
+            if (!isNaN(val)) this.loadBank(val);
         });
 
+        // Emulator Control
         document.getElementById('runRom').addEventListener('click', () => {
-            if (!this.workingBuffer) return alert("Upload ROM first");
+            if (!this.workingBuffer) return alert("Please upload a ROM first!");
             this.bootEmulator();
         });
 
+        // IPS Export
         document.getElementById('exportIps').addEventListener('click', () => {
-            if (!this.originalBuffer) return;
-            const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
-            Patcher.downloadPatch(patch);
+            if (!this.originalBuffer || !this.workingBuffer) return;
+            try {
+                const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
+                Patcher.downloadPatch(patch, "CodaRom_v04.ips");
+            } catch (err) {
+                alert("IPS Generation failed: " + err.message);
+            }
         });
 
         this.bindTouchControls();
@@ -93,7 +120,7 @@ export class CodaRom {
         for (let i = 0; i < count; i++) {
             const opt = document.createElement('option');
             opt.value = i;
-            opt.textContent = `Bank 0x${i.toString(16).toUpperCase()}`;
+            opt.textContent = `Bank 0x${i.toString(16).toUpperCase().padStart(2, '0')}`;
             select.appendChild(opt);
         }
     }
@@ -101,6 +128,7 @@ export class CodaRom {
     loadBank(idx) {
         this.currentBankOffset = idx * 0x4000;
         document.getElementById('bankSelect').value = idx;
+        // Trigger the VRAM viewer to render the tiles for the selected bank
         this.viewer.renderBank(this.workingBuffer, this.currentBankOffset);
     }
 
@@ -109,27 +137,47 @@ export class CodaRom {
         if (this.emuLoop) clearInterval(this.emuLoop);
 
         try {
-            // Using window context to ensure legacy compatibility
+            // Instantiate the GameBoyCore from the global window scope
             this.gb = new window.GameBoyCore(canvas, "");
             this.gb.start(this.workingBuffer);
-            this.emuLoop = setInterval(() => this.gb.run(), 16);
-            console.log("Emulator running.");
+            
+            // Run at ~60 FPS
+            this.emuLoop = setInterval(() => {
+                this.gb.run();
+            }, 16);
+            
+            console.log("Emulator engine started with working buffer.");
         } catch (err) {
-            console.error(err);
-            alert("Boot failed. See console.");
+            console.error("Emulator Crash:", err);
+            alert("Emulator Boot Failed! Check the console for internal engine errors.");
         }
     }
 
     bindTouchControls() {
-        const keys = {"btn-up":2,"btn-down":3,"btn-left":1,"btn-right":0,"btn-a":4,"btn-b":5,"btn-select":6,"btn-start":7};
+        const keys = {
+            "btn-up": 2, "btn-down": 3, "btn-left": 1, "btn-right": 0,
+            "btn-a": 4, "btn-b": 5, "btn-select": 6, "btn-start": 7
+        };
+
         Object.entries(keys).forEach(([id, code]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            const press = (v) => { if(this.gb) this.gb.JoyPadEvent(code, v); };
-            btn.onmousedown = btn.ontouchstart = (e) => { e.preventDefault(); press(true); };
-            btn.onmouseup = btn.ontouchend = btn.onmouseleave = (e) => { e.preventDefault(); press(false); };
+
+            const handleAction = (isPressed) => {
+                if (this.gb) this.gb.JoyPadEvent(code, isPressed);
+            };
+
+            // Prevent default to stop scrolling/zooming while playing
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(true); });
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction(false); });
+            btn.addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(true); });
+            btn.addEventListener('mouseup', (e) => { e.preventDefault(); handleAction(false); });
+            btn.addEventListener('mouseleave', (e) => { if(this.gb) handleAction(false); });
         });
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => { new CodaRom(); });
+// Global Startup
+window.addEventListener('DOMContentLoaded', () => { 
+    window.App = new CodaRom(); 
+});

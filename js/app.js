@@ -8,13 +8,10 @@ export class CodaRom {
         this.currentBankOffset = 0;
         this.viewer = new VRAMViewer('tileCanvas');
         this.gb = null;
-        this.emuLoop = null; // Changed to hold requestAnimationFrame ID
+        this.emuLoop = null;
         this.init();
     }
 
-    /**
-     * Diagnostic tool to verify that scripts in /lib/ are actually loaded.
-     */
     async runHealthCheck() {
         console.log("--- CodaRom System Health Check ---");
         const requirements = [
@@ -23,20 +20,13 @@ export class CodaRom {
             { name: "XAudioServer.js", check: () => typeof window.XAudioServer === 'function' }
         ];
 
-        let results = [];
         let missing = [];
-
         requirements.forEach(lib => {
-            const isLoaded = lib.check();
-            results.push({ Library: lib.name, Status: isLoaded ? "✅ Loaded" : "❌ Missing" });
-            if (!isLoaded) missing.push(lib.name);
+            if (!lib.check()) missing.push(lib.name);
         });
 
-        console.table(results);
-
         if (missing.length > 0) {
-            const msg = `CRITICAL ERROR: Missing dependencies:\n\n${missing.join('\n')}\n\nCheck folder naming (lib vs libs) and case-sensitivity.`;
-            alert(msg);
+            alert(`Missing dependencies: ${missing.join(', ')}`);
             return false;
         }
         return true;
@@ -46,7 +36,6 @@ export class CodaRom {
         const healthy = await this.runHealthCheck();
         if (!healthy) return;
 
-        // ROM Upload
         document.getElementById('romUpload').addEventListener('change', async (e) => {
             const file = e.target.files[0];
             if (!file) return;
@@ -63,14 +52,11 @@ export class CodaRom {
                 this.loadBank(0);
                 
                 label.textContent = "Bank Explorer:";
-                console.log("ROM Ready.");
             } catch (err) {
-                console.error("ROM Load Error:", err);
                 label.textContent = "Load Failed!";
             }
         });
 
-        // Tabs Logic
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const target = e.target.dataset.tab;
@@ -81,19 +67,16 @@ export class CodaRom {
             });
         });
 
-        // Bank Selection
         document.getElementById('bankSelect').addEventListener('change', (e) => {
             const val = parseInt(e.target.value);
             if (!isNaN(val)) this.loadBank(val);
         });
 
-        // Emulator Control
         document.getElementById('runRom').addEventListener('click', () => {
-            if (!this.workingBuffer) return alert("Please upload a ROM first!");
+            if (!this.workingBuffer) return alert("Upload ROM first");
             this.bootEmulator();
         });
 
-        // IPS Export
         document.getElementById('exportIps').addEventListener('click', () => {
             if (!this.originalBuffer || !this.workingBuffer) return;
             const patch = Patcher.generateIPS(this.originalBuffer, this.workingBuffer);
@@ -123,42 +106,53 @@ export class CodaRom {
 
     bootEmulator() {
         const canvas = document.getElementById('emuCanvas');
-        
-        // Stop any existing loop
-        if (this.emuLoop) {
-            cancelAnimationFrame(this.emuLoop);
-        }
+        if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            console.log("Starting Emulator Boot Sequence...");
+            console.log("Analyzing Header & Preparing Buffer...");
+            
+            // 1. Calculate required size from Header [0x0148]
+            // Game Boy ROMs are 32KB * (2 ^ sizeCode)
+            const sizeCode = this.workingBuffer[0x0148];
+            const expectedSize = 32768 << sizeCode;
+            
+            let bootBuffer = this.workingBuffer;
 
-            // Ensure the canvas is correctly sized
+            // 2. Auto-Padding for Trimmed ROMs
+            if (this.workingBuffer.length < expectedSize) {
+                console.warn(`Padding ROM: ${this.workingBuffer.length} -> ${expectedSize}`);
+                bootBuffer = new Uint8Array(expectedSize);
+                bootBuffer.fill(0xFF); // Fill with standard empty ROM data
+                bootBuffer.set(this.workingBuffer);
+            }
+
+            // 3. Setup Canvas and Core
             canvas.width = 160;
             canvas.height = 144;
-
-            // Instantiate Core
-            // Note: Some versions of GameBoyCore require the canvas, 
-            // and an optional "options" object or rom string.
             this.gb = new window.GameBoyCore(canvas, "");
             
-            // Start the core with the buffer
-            this.gb.start(this.workingBuffer);
+            // 4. Force GBC Mode for Pokemon Crystal
+            // Offset 0x0143: 0x80 or 0xC0 indicates GBC support
+            const cgbFlag = this.workingBuffer[0x0143];
+            if (cgbFlag === 0x80 || cgbFlag === 0xC0) {
+                console.log("GBC Flag detected, enabling Color mode.");
+                this.gb.toggleGBC(true);
+            }
+
+            // 5. Start Engine
+            this.gb.start(bootBuffer);
             
-            // Animation loop using requestAnimationFrame for better mobile performance
             const emuStep = () => {
                 if (this.gb) {
                     this.gb.run();
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
-
             this.emuLoop = requestAnimationFrame(emuStep);
-            console.log("✅ Emulator engine live.");
             
         } catch (err) {
-            console.error("Emulator Crash:", err);
-            // If the error is still {}, try to stringify or log the keys
-            alert("Boot Failed! " + (err.message || "Unknown Core Error"));
+            console.error("Boot Error:", err);
+            alert("Boot Failed: " + (err.message || "Invalid ROM Structure"));
         }
     }
 
@@ -167,24 +161,16 @@ export class CodaRom {
             "btn-up": 2, "btn-down": 3, "btn-left": 1, "btn-right": 0,
             "btn-a": 4, "btn-b": 5, "btn-select": 6, "btn-start": 7
         };
-
         Object.entries(keys).forEach(([id, code]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-
-            const handleAction = (isPressed) => {
-                if (this.gb) this.gb.JoyPadEvent(code, isPressed);
-            };
-
+            const handleAction = (isPressed) => { if (this.gb) this.gb.JoyPadEvent(code, isPressed); };
             btn.addEventListener('touchstart', (e) => { e.preventDefault(); handleAction(true); }, {passive: false});
             btn.addEventListener('touchend', (e) => { e.preventDefault(); handleAction(false); }, {passive: false});
             btn.addEventListener('mousedown', (e) => { e.preventDefault(); handleAction(true); });
             btn.addEventListener('mouseup', (e) => { e.preventDefault(); handleAction(false); });
-            btn.addEventListener('mouseleave', (e) => { handleAction(false); });
         });
     }
 }
 
-window.addEventListener('DOMContentLoaded', () => { 
-    window.App = new CodaRom(); 
-});
+window.addEventListener('DOMContentLoaded', () => { window.App = new CodaRom(); });

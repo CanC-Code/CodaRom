@@ -66,15 +66,27 @@
         </section>
     </main>
 
+    <script>
+        // Many legacy JS ports of C++ emulators use a global 'cout' object for logging
+        window.cout = {
+            print: function(msg) { console.log("CORE:", msg); },
+            println: function(msg) { console.log("CORE:", msg); },
+            write: function(msg) { console.log("CORE:", msg); }
+        };
+    </script>
+
     <script src="./lib/XAudioServer.js"></script>
     <script src="./lib/GameBoyCore.js"></script>
     <script src="./lib/GameBoyIO.js"></script>
 
     <script type="module">
         window.addEventListener('load', () => {
+            // Check if the Core loaded into the global scope
             if (typeof GameBoyCore === 'undefined') {
                 document.getElementById('systemStatus').style.display = 'block';
-                console.error("Path Error: Could not find lib/GameBoyCore.js");
+                console.error("CRITICAL: GameBoyCore.js not found in ./lib/");
+            } else {
+                console.log("SYSTEM: Dependencies verified.");
             }
         });
     </script>

@@ -20,12 +20,14 @@ export class CodaRom {
                 const arrayBuffer = await file.arrayBuffer();
                 let raw = new Uint8Array(arrayBuffer);
 
+                // 1. HEADER-BASED REPAIR
+                // Pokemon Crystal (MBC3) must be exactly 2MB.
                 const sizeCode = raw[0x0148];
                 const expectedSize = 32768 << sizeCode;
 
                 if (raw.length < expectedSize) {
-                    console.log(`Padding ROM to ${expectedSize} bytes...`);
-                    const padded = new Uint8Array(expectedSize).fill(0);
+                    console.log(`Pading ROM: ${raw.length} -> ${expectedSize}`);
+                    const padded = new Uint8Array(expectedSize).fill(0xFF);
                     padded.set(raw);
                     raw = padded;
                 }
@@ -35,12 +37,12 @@ export class CodaRom {
 
                 this.populateBankDropdown();
                 this.loadBank(0);
-                console.log("ROM Ready.");
             } catch (err) {
-                console.error("ROM Load Error:", err);
+                console.error("Load Error:", err);
             }
         });
 
+        // Tab Switching
         document.querySelectorAll('.tab-btn').forEach(btn => {
             btn.onclick = () => {
                 const target = btn.dataset.tab;
@@ -56,14 +58,7 @@ export class CodaRom {
         };
 
         document.getElementById('runRom').onclick = () => {
-            if (!this.workingBuffer) return alert("Please upload a ROM first.");
-            
-            // CRITICAL: Resume Audio Context on user gesture
-            if (window.AudioContext || window.webkitAudioContext) {
-                const context = new (window.AudioContext || window.webkitAudioContext)();
-                if (context.state === 'suspended') context.resume();
-            }
-
+            if (!this.workingBuffer) return alert("Upload ROM first!");
             this.bootEmulator();
         };
 
@@ -91,61 +86,52 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            // 1. Setup Canvas dimensions
-            canvas.width = 160;
-            canvas.height = 144;
+            // 1. Prepare Buffer: Some versions of GameBoyCore prefer a standard Array
+            const romData = Array.from(this.workingBuffer);
 
-            // 2. Convert to Binary String
-            let binaryString = "";
-            for (let i = 0; i < this.workingBuffer.length; i++) {
-                binaryString += String.fromCharCode(this.workingBuffer[i]);
-            }
+            // 2. Initialize Core
+            // If GameBoyCore(canvas, data) fails, it might need GameBoyCore(canvas, data, options)
+            this.gb = new window.GameBoyCore(canvas, romData);
 
-            // 3. Initialize Core
-            this.gb = new window.GameBoyCore(canvas, binaryString);
-            
-            // 4. Force GBC Mode manually before start
+            // 3. HARDWARE CONFIGURATION
+            // Pokemon Crystal MUST have CGB (Color) mode enabled or it stays white.
             this.gb.useGBC = true;
             this.gb.cgb = true;
+            this.gb.cartridgeType = this.workingBuffer[0x0147];
             
-            // 5. Grant Galitz Core: Start and immediately trigger the run loop
+            // Bypass potential audio-lock
+            if (this.gb.registerAudioBuffer) this.gb.registerAudioBuffer();
+
+            // 4. START ENGINE
             this.gb.start();
-            
-            // 6. Robust Animation Loop
+
+            // 5. IMPROVED EXECUTION LOOP
+            // We force a high-priority loop to ensure frames are actually pushed to canvas
             const emuStep = () => {
                 if (this.gb) {
-                    // Execute frames until the internal buffer is satisfied
-                    // This bypasses the "white screen" caused by the engine 
-                    // waiting for an external timer that doesn't exist in mobile web
-                    this.gb.run(); 
+                    // Run logic until a frame is ready
+                    this.gb.run();
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
             
-            console.log("Boot sequence complete. Engine loop running.");
+            console.log("✅ Emulator Loop Active");
 
         } catch (err) {
-            console.error("Boot Failure:", err);
+            console.error("Boot failure:", err);
             alert("Emulator Error: " + err.message);
         }
     }
 
     bindTouchControls() {
-        const keys = {
-            "btn-up": 2, "btn-down": 3, "btn-left": 1, "btn-right": 0,
-            "btn-a": 4, "btn-b": 5
-        };
+        const keys = { "btn-up": 2, "btn-down": 3, "btn-left": 1, "btn-right": 0, "btn-a": 4, "btn-b": 5 };
         Object.entries(keys).forEach(([id, code]) => {
             const btn = document.getElementById(id);
             if (!btn) return;
-            const handle = (isPressed) => { 
-                if (this.gb) this.gb.JoyPadEvent(code, isPressed); 
-            };
+            const handle = (isPressed) => { if (this.gb) this.gb.JoyPadEvent(code, isPressed); };
             btn.addEventListener('touchstart', (e) => { e.preventDefault(); handle(true); }, {passive: false});
             btn.addEventListener('touchend', (e) => { e.preventDefault(); handle(false); }, {passive: false});
-            btn.addEventListener('mousedown', (e) => { e.preventDefault(); handle(true); });
-            btn.addEventListener('mouseup', (e) => { e.preventDefault(); handle(false); });
         });
     }
 }

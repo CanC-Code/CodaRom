@@ -24,6 +24,7 @@ export class CodaRom {
                 const expectedSize = 32768 << sizeCode;
 
                 if (raw.length < expectedSize) {
+                    console.log(`Padding ROM to ${expectedSize} bytes...`);
                     const padded = new Uint8Array(expectedSize).fill(0);
                     padded.set(raw);
                     raw = padded;
@@ -83,32 +84,47 @@ export class CodaRom {
         if (this.emuLoop) cancelAnimationFrame(this.emuLoop);
 
         try {
-            // 1. Optimized ROM conversion (Binary String)
-            // Using a loop on 2MB can crash mobile browsers; this is faster.
-            const binaryString = Array.from(this.workingBuffer, b => String.fromCharCode(b)).join("");
+            // 1. Convert Buffer to Binary String (Core requirement)
+            let binaryString = "";
+            const len = this.workingBuffer.length;
+            for (let i = 0; i < len; i++) {
+                binaryString += String.fromCharCode(this.workingBuffer[i]);
+            }
 
             // 2. Core Setup
             this.gb = new window.GameBoyCore(canvas, binaryString);
             
-            // Required flags for Pokemon Crystal
-            this.gb.toggleCGB(true); 
-            this.gb.registerAudioBuffer(); // Pre-link audio
+            // 3. Enable Color Mode Safely
+            // We check for the function, then fall back to common property names
+            if (typeof this.gb.toggleCGB === 'function') {
+                this.gb.toggleCGB(true);
+            } else if (typeof this.gb.toggleGBC === 'function') {
+                this.gb.toggleGBC(true);
+            } else {
+                // Direct property manipulation for legacy versions
+                this.gb.useGBC = true;
+                this.gb.cgb = true;
+                this.gb.isGBC = true;
+            }
 
-            // 3. Start Engine
+            // 4. Initialize Audio if available
+            if (this.gb.registerAudioBuffer) {
+                this.gb.registerAudioBuffer();
+            }
+
+            // 5. Start Engine
             this.gb.start();
 
-            // 4. Force Execution Loop
-            // We check 'stopEmulator' flags which the core uses internally
+            // 6. Execution Loop
             const emuStep = () => {
                 if (this.gb) {
-                    // Execute a single frame
                     this.gb.run(); 
                     this.emuLoop = requestAnimationFrame(emuStep);
                 }
             };
             this.emuLoop = requestAnimationFrame(emuStep);
             
-            console.log("Emulator execution loop active.");
+            console.log("Emulator Started with Color Mode enabled.");
 
         } catch (err) {
             console.error("Boot Failure:", err);
@@ -127,8 +143,8 @@ export class CodaRom {
             const handle = (isPressed) => { 
                 if (this.gb) this.gb.JoyPadEvent(code, isPressed); 
             };
-            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handle(true); });
-            btn.addEventListener('touchend', (e) => { e.preventDefault(); handle(false); });
+            btn.addEventListener('touchstart', (e) => { e.preventDefault(); handle(true); }, {passive: false});
+            btn.addEventListener('touchend', (e) => { e.preventDefault(); handle(false); }, {passive: false});
             btn.addEventListener('mousedown', (e) => { e.preventDefault(); handle(true); });
             btn.addEventListener('mouseup', (e) => { e.preventDefault(); handle(false); });
         });
